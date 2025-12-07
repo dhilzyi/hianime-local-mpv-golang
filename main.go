@@ -24,7 +24,7 @@ type SeriesData struct {
 }
 
 type Episodes struct {
-	Number        int `json:"number"`
+	Number        int
 	EnglishTitle  string
 	JapaneseTitle string
 	Url           string
@@ -32,7 +32,7 @@ type Episodes struct {
 
 type AjaxResponse struct {
 	Status bool   `json:"status"`
-	Html   string `json:"html"` // This is the gold we want
+	Html   string `json:"html"`
 }
 
 func GetEpisodes(series_url string) []Episodes {
