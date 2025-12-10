@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"hianime-mpv-go/jimaku"
 
 	"log"
 	"net/http"
@@ -22,8 +23,11 @@ import (
 var BaseUrl string = "https://hianime.to"
 
 type SeriesData struct {
-	AnimeID string `json:"anime_id"`
-	Name    string `json:"name"`
+	AnimeID      string `json:"anime_id"`
+	EnglishName  string `json:"name"`
+	AnilistID    string `json:"anilist_id"`
+	SeriesUrl    string `json:"series_url"`
+	JapaneseName string
 }
 
 type Episodes struct {
@@ -97,11 +101,23 @@ func GetSeriesData(series_url string) SeriesData {
 		log.Fatal(err)
 	}
 
+	// series_html, err := doc.Html()
+	// os.WriteFile("a.html", []byte(series_html), 0644)
+
+	series_title := doc.Find("h2.film-name")
+	jname, exists := series_title.Attr("data-jname")
+	if !exists {
+		fmt.Println("Couldn't found japanese title.")
+	}
+
 	syncData := doc.Find("#syncData")
 
 	rawJson := syncData.Text()
 	var data SeriesData
 	json.Unmarshal([]byte(rawJson), &data)
+
+	data.EnglishName = series_title.Text()
+	data.JapaneseName = jname
 
 	return data
 }
@@ -345,6 +361,9 @@ func ExtractMegacloud(iframe_url string) StreamData {
 
 	var source_json Sources
 
+	// doc, err := goquery.NewDocumentFromReader(source_resp.Body)
+	// fmt.Println(doc.Text())
+
 	if err := json.NewDecoder(source_resp.Body).Decode(&source_json); err != nil {
 		fmt.Println("Failed to convert to JSON: " + err.Error())
 		return StreamData{}
@@ -421,8 +440,9 @@ func PlayMpv(mpv_commands []string) int {
 
 	scanner := bufio.NewScanner(stdout)
 	timer := time.AfterFunc(20*time.Second, func() {
-		fmt.Println("\n⏰ Timeout reached! Killing MPV...")
+		fmt.Println("\n--> MPV is timeout. Killing process...")
 		cmd.Process.Kill()
+		return_value = 0
 	})
 
 	for scanner.Scan() {
@@ -430,20 +450,21 @@ func PlayMpv(mpv_commands []string) int {
 
 		// fmt.Println(line)
 
-		if strings.Contains(line, "(+) Video --vid=") {
-			fmt.Println("\nStream is valid. Opening mpv")
-			// return_value = 0
-			// break
+		if strings.Contains(line, "(+) Video --vid= ") || strings.Contains(line, "h264") {
 			timer.Stop()
+			fmt.Println("\nStream is valid. Opening mpv")
+			return_value = 1
+			break
 		} else if strings.Contains(line, "Opening failed") || strings.Contains(line, "HTTP error") {
 			fmt.Println("Failed to stream. Potentially dead link...")
-			// return_value = 1
+			return_value = 0
 			cmd.Process.Kill()
+			break
 		}
 	}
 
 	if err := cmd.Wait(); err != nil {
-		fmt.Println("Execute failed.")
+		fmt.Println("\nExecute failed.")
 	}
 
 	return return_value
@@ -473,7 +494,7 @@ series_loop:
 		series_metadata := GetSeriesData(url)
 	episode_loop:
 		for {
-			fmt.Printf("\n--- Series: %s ---\n\n", series_metadata.Name)
+			fmt.Printf("\n--- Series: %s ---\n\n", series_metadata.JapaneseName)
 
 			if len(cache_episodes) > 0 {
 				for i := range len(cache_episodes) {
@@ -547,12 +568,13 @@ series_loop:
 				var stream_data StreamData
 				var selected_server ServerList
 
-				if int_server_input > 0 && int_server_input <= len(cache_episodes) {
+				if int_server_input > 0 && int_server_input <= len(servers) {
 					selected_server = servers[int_server_input-1]
 					iframe_link := GetIframe(selected_server.DataId)
 					stream_data = ExtractMegacloud(iframe_link)
 				} else {
 					fmt.Println("Number is invalid.")
+					continue
 				}
 
 				if stream_data.Url == "" {
@@ -589,12 +611,21 @@ series_loop:
 
 					mpv_commands = append(mpv_commands, "--v")
 
-					// fmt.Println(stream_data.Url)
-					// fmt.Println(stream_data.Referer)
 					// fmt.Println(mpv_commands)
+					jimaku_list, err := jimaku.GetSubsJimaku(series_metadata.AnilistID, selected_ep.Number)
+					if err != nil {
+						fmt.Printf("Failed to get subs from jimaku: %s", err)
+					}
+
+					if len(jimaku_list) > 0 {
+						for i := range jimaku_list {
+							mpv_commands = append(mpv_commands, fmt.Sprintf("--sub-file=%s", jimaku_list[i]))
+							fmt.Printf("Adding %s to the mpv...\n", jimaku_list[i])
+						}
+					}
 
 					callback := PlayMpv(mpv_commands)
-					if callback == 0 {
+					if callback == 1 {
 						break server_loop
 					} else {
 						continue
