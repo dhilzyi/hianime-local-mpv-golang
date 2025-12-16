@@ -2,3 +2,5 @@ notes.txt
 
 *html
 state/history.json
+*_test.go
+database.go

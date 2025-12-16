@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"hianime-mpv-go/config"
 	"hianime-mpv-go/jimaku"
+	// "hianime-mpv-go/player"
 	"hianime-mpv-go/state"
 
 	"log"
@@ -277,19 +279,17 @@ func GetNonce(html string) string {
 	return ""
 }
 
-func ExtractMegacloud(iframe_url string) StreamData {
+func ExtractMegacloud(iframe_url string) (StreamData, error) {
 	parsed_url, err := url.Parse(iframe_url)
 	if err != nil {
-		fmt.Println("Failed to parse url: " + err.Error())
-		return StreamData{}
+		return StreamData{}, fmt.Errorf("Failed to parse url: %w", err)
 	}
 	default_domain := fmt.Sprintf("%s://%s/", parsed_url.Scheme, parsed_url.Host)
 	user_agent := "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36"
 
 	req, err := http.NewRequest("GET", iframe_url, nil)
 	if err != nil {
-		fmt.Println("Failed to fecth iframe link: " + err.Error())
-		return StreamData{}
+		return StreamData{}, fmt.Errorf("Failed to fecth iframe link: %w", err)
 	}
 
 	req.Header.Set("User-Agent", user_agent)
@@ -343,8 +343,7 @@ func ExtractMegacloud(iframe_url string) StreamData {
 	sources_url := fmt.Sprintf("%sembed-2/v3/e-1/getSources?id=%s&_k=%s", default_domain, file_id, nonce)
 	source_req, err := http.NewRequest("GET", sources_url, nil)
 	if err != nil {
-		fmt.Println("Failed when requesting source url: " + err.Error())
-		return StreamData{}
+		return StreamData{}, fmt.Errorf("Failed when requesting source url: %w", err)
 	}
 
 	extractor_headers := map[string]string{
@@ -359,8 +358,7 @@ func ExtractMegacloud(iframe_url string) StreamData {
 
 	source_resp, err := client.Do(source_req)
 	if err != nil {
-		fmt.Println("Failed to fetch source url: " + err.Error())
-		return StreamData{}
+		return StreamData{}, fmt.Errorf("Failed to fetch source url: %w", err)
 	}
 	defer source_resp.Body.Close()
 
@@ -370,8 +368,7 @@ func ExtractMegacloud(iframe_url string) StreamData {
 	// fmt.Println(doc.Text())
 
 	if err := json.NewDecoder(source_resp.Body).Decode(&source_json); err != nil {
-		fmt.Println("Failed to convert to JSON: " + err.Error())
-		return StreamData{}
+		return StreamData{}, fmt.Errorf("Failed to convert to JSON: %w", err)
 	}
 
 	map_struct := StreamData{}
@@ -388,10 +385,10 @@ func ExtractMegacloud(iframe_url string) StreamData {
 			Outro:     source_json.Outro,
 		}
 	} else {
-		fmt.Println("	Files are encrypted. Try other servers.")
+		return StreamData{}, fmt.Errorf("Files are encrypted. Try other servers.")
 	}
 
-	return map_struct
+	return map_struct, nil
 }
 
 // NOTE: For intro and outro in mpv so user can know the timestamps.
@@ -418,8 +415,13 @@ func CreateChapters(data StreamData) string {
 		contents += fmt.Sprintf("title=%s\n\n", title)
 	}
 
-	writePart(0, data.Intro.Start, "Part A")
-	writePart(data.Intro.Start, data.Intro.End, "Intro")
+	if data.Intro.Start == 0 {
+		writePart(data.Intro.Start, data.Intro.End, "Intro")
+	} else {
+		writePart(0, data.Intro.Start, "Part A")
+		writePart(data.Intro.Start, data.Intro.End, "Intro")
+	}
+
 	writePart(data.Intro.End, data.Outro.Start, "Part B")
 	writePart(data.Outro.Start, data.Outro.End, "Outro")
 	writePart(data.Outro.End, 9999999, "Part C")
@@ -431,6 +433,13 @@ func CreateChapters(data StreamData) string {
 func PlayMpv(mpv_commands []string) int {
 	cmdName := "mpv.exe"
 
+	// spyPath, err := player.GenerateSpyScript()
+	// if err != nil {
+	// 	fmt.Println("Failed to create status tracker:", err)
+	// } else {
+	// 	defer os.Remove(spyPath)
+	// 	mpv_commands = append(mpv_commands, "--script="+spyPath)
+	// }
 	var return_value int
 	cmd := exec.Command(cmdName, mpv_commands...)
 
@@ -471,6 +480,44 @@ func PlayMpv(mpv_commands []string) int {
 			timer.Stop()
 			cmd.Process.Kill()
 			break
+		} else if strings.Contains(line, "::STATUS::") {
+			parts := strings.Split(line, "::STATUS::")
+
+			if len(parts) > 0 {
+				currentStr, totalStr, found := strings.Cut(parts[1], "/")
+
+				if found {
+					current, err := strconv.ParseFloat(currentStr, 64)
+					if err != nil {
+						fmt.Println("Error while converting to float: " + err.Error())
+					}
+					total, err := strconv.ParseFloat(totalStr, 64)
+					if err != nil {
+						fmt.Println("Error while converting to float: " + err.Error())
+					}
+
+					fmt.Println(current)
+					fmt.Println(total)
+				}
+			}
+
+			continue
+		} else if strings.Contains(line, "::SUB_DELAY::") {
+			parts := strings.Split(line, "::SUB_DELAY::")
+
+			for i := range parts {
+				fmt.Println(parts[i])
+			}
+
+			raw, _, found := strings.Cut(parts[1], "/")
+			if found {
+				delay, err := strconv.ParseFloat(raw, 64)
+				if err != nil {
+					fmt.Println("Error while converting to float: " + err.Error())
+				}
+				fmt.Printf("DELAY %f", delay)
+			}
+			continue
 		}
 	}
 
@@ -487,6 +534,10 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	config_session, err := config.LoadConfig()
+	if err != nil {
+		fmt.Println("Fail to load config file: " + err.Error())
+	}
 
 series_loop:
 	for {
@@ -499,7 +550,7 @@ series_loop:
 		} else {
 			fmt.Printf("\n--- No recent history found ---\n\n")
 		}
-		fmt.Print("\nPaste hianime url to fetch: ")
+		fmt.Print("\nEnter number or paste hianime url to play: ")
 		scanner.Scan()
 
 		series_input := scanner.Text()
@@ -598,53 +649,74 @@ series_loop:
 			}
 		server_loop:
 			for {
-				fmt.Print("\n--- Available Servers ---\n")
-
 				if !(len(servers) > 0) {
 					fmt.Println("\nNo available servers found.")
+					break
 				}
 
-				for i := range len(servers) {
-					ser_ins := servers[i]
-
-					if ser_ins.Type == "dub" {
-						fmt.Printf(" [%d] %s (Dub)\n", i+1, ser_ins.Name)
-					} else {
-						fmt.Printf(" [%d] %s\n", i+1, ser_ins.Name)
-					}
-				}
-				fmt.Print("\nEnter server number (or 'q' to go back): ")
-				scanner.Scan()
-
-				server_input := scanner.Text()
-				server_input = strings.TrimSpace(server_input)
-
-				if server_input == "q" {
-					break server_loop
-				}
-				int_server_input, err := strconv.Atoi(server_input)
-				if err != nil {
-					fmt.Printf("Error when converting to int: %s\n", err.Error())
-					continue
-				}
-
-				var stream_data StreamData
 				var selected_server ServerList
+				var stream_data StreamData
 
-				if int_server_input > 0 && int_server_input <= len(servers) {
-					selected_server = servers[int_server_input-1]
-					iframe_link := GetIframe(selected_server.DataId)
-					stream_data = ExtractMegacloud(iframe_link)
+				if config_session.AutoSelectServer {
+					fmt.Println("\n--> Auto-select server enabled.")
+					for i := range servers {
+						selected_server = servers[i]
+						fmt.Printf("--> Selecting '%s'....\n", selected_server.Name)
+
+						iframe_link := GetIframe(selected_server.DataId)
+						attempt, err := ExtractMegacloud(iframe_link)
+						if err == nil {
+							stream_data = attempt
+							break
+						}
+					}
+
 				} else {
-					fmt.Println("Number is invalid.")
-					continue
+					fmt.Print("\n--- Available Servers ---\n")
+
+					for i := range len(servers) {
+						ser_ins := servers[i]
+
+						if ser_ins.Type == "dub" {
+							fmt.Printf(" [%d] %s (Dub)\n", i+1, ser_ins.Name)
+						} else {
+							fmt.Printf(" [%d] %s\n", i+1, ser_ins.Name)
+						}
+					}
+					fmt.Print("\nEnter server number (or 'q' to go back): ")
+					scanner.Scan()
+
+					server_input := scanner.Text()
+					server_input = strings.TrimSpace(server_input)
+
+					if server_input == "q" {
+						break server_loop
+					}
+					int_server_input, err := strconv.Atoi(server_input)
+					if err != nil {
+						fmt.Printf("Error when converting to int: %s\n", err.Error())
+						continue
+					}
+
+					if int_server_input > 0 && int_server_input <= len(servers) {
+						selected_server = servers[int_server_input-1]
+						iframe_link := GetIframe(selected_server.DataId)
+						attempt, err := ExtractMegacloud(iframe_link)
+						if err == nil {
+							stream_data = attempt
+							break
+						}
+					} else {
+						fmt.Println("Number is invalid.")
+						continue
+					}
 				}
 
 				if stream_data.Url == "" {
 					fmt.Println("Couldn't found stream url")
 					continue
 				} else {
-					display_title := fmt.Sprintf("[Ep. %d] %s (%s)", selected_ep.Number, selected_ep.JapaneseTitle, selected_server.Name)
+					display_title := fmt.Sprintf("%s [Ep. %d] %s (%s)", series_metadata.JapaneseName, selected_ep.Number, selected_ep.JapaneseTitle, selected_server.Name)
 					header_fields := []string{
 						fmt.Sprintf("Referer: %s", stream_data.Referer),
 						fmt.Sprintf("User-Agent: %s", stream_data.UserAgent),
@@ -688,7 +760,7 @@ series_loop:
 					if callback == 1 {
 						break server_loop
 					} else {
-						continue
+						break
 					}
 				}
 			}

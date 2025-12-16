@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -32,13 +33,14 @@ var JimakuBaseUrl string = "https://jimaku.cc"
 var JimakuApi string = os.Getenv("JIMAKU_API_KEY")
 
 func downloadFile(url string, file_path string) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(file_path), 0755); err != nil {
+	cleanPath := strings.TrimRight(file_path, ".")
+	if err := os.MkdirAll(filepath.Dir(cleanPath), 0755); err != nil {
 		return "", fmt.Errorf("failed to create dir: %w", err)
 	}
 
-	out, err := os.Create(file_path)
+	out, err := os.Create(cleanPath)
 	if err != nil {
-		return "", fmt.Errorf("Failed to create file %s: %w", file_path, err)
+		return "", fmt.Errorf("Failed to create file %s: %w", cleanPath, err)
 	}
 	defer out.Close()
 
@@ -58,7 +60,7 @@ func downloadFile(url string, file_path string) (string, error) {
 		return "", fmt.Errorf("Error while copying the data to the file: %w", err)
 	}
 
-	return file_path, nil
+	return cleanPath, nil
 }
 
 func getFiles(entry_id, episodeNum int) (Files, error) {
@@ -155,7 +157,10 @@ func GetSubsJimaku(anilistID string, episodeNum int) ([]string, error) {
 	}
 
 	default_path := filepath.Join(homeDir, "subtitle")
-	series_dir := filepath.Join(default_path, data[0].RomajiName)
+	re := regexp.MustCompile(`[<>:"/\\|?*\.]`)
+	cleanName := re.ReplaceAllString(data[0].RomajiName, "")
+
+	series_dir := filepath.Join(default_path, cleanName)
 
 	if err := os.MkdirAll(series_dir, 0755); err != nil {
 		return []string{}, fmt.Errorf("Failed to create series directory: %w", err)
@@ -203,8 +208,8 @@ func GetSubsJimaku(anilistID string, episodeNum int) ([]string, error) {
 		name_list = append(name_list, downloadedPath)
 	}
 
-	if len(name_list) > 0 {
-		fmt.Printf("%d subtitle downloaded.\n", len(name_list))
+	if len(name_list) == 0 {
+		return name_list, fmt.Errorf("Failed to retrieve.")
 	}
 
 	return name_list, nil

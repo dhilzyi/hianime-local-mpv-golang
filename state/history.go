@@ -13,6 +13,7 @@ type History struct {
 	EnglishName  string `json:"en_name"`
 	LastEpisode  int    `json:"last_episode"`
 	AnilistID    string `json:"anilist_id"`
+	SubDelay     int64  `json:"sub_delay"`
 }
 
 func getDefaultPath() (string, error) {
@@ -76,7 +77,7 @@ func LoadHistory() ([]History, error) {
 	}
 
 	if _, err := os.Stat(historyPath); err == nil {
-		fmt.Println("File history exists. Loading....")
+		fmt.Println("File history load success.")
 		jsonData, err := os.ReadFile(historyPath)
 		if err != nil {
 			return history_session, fmt.Errorf("Failed to open json files: %w", err)
