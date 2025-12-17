@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -32,8 +31,8 @@ func GetSeriesData(series_url string) SeriesData {
 		log.Fatal(err)
 	}
 
-	series_html, err := doc.Html()
-	os.WriteFile("a.html", []byte(series_html), 0644)
+	// series_html, err := doc.Html()
+	// os.WriteFile("a.html", []byte(series_html), 0644)
 
 	header := doc.Find("h2.film-name")
 

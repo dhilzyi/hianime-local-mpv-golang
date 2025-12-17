@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"hianime-mpv-go/hianime"
 )
 
 type Search []SearchElement
@@ -30,7 +32,9 @@ type FileElement struct {
 
 var UserAgent = ""
 var JimakuBaseUrl string = "https://jimaku.cc"
-var JimakuApi string = os.Getenv("JIMAKU_API_KEY")
+
+// Set your JimakuAPI to environment table or just put it directly in this variable as a string.
+var JimakuApi string = os.Getenv("JIMAKU_API_KEY") // or "xxxxxxxxx"
 
 func downloadFile(url string, file_path string) (string, error) {
 	cleanPath := strings.TrimRight(file_path, ".")
@@ -103,10 +107,11 @@ func getFiles(entry_id, episodeNum int) (Files, error) {
 
 }
 
-func GetSubsJimaku(anilistID string, episodeNum int) ([]string, error) {
+func GetSubsJimaku(series_data hianime.SeriesData, episodeNum int) ([]string, error) {
 	if JimakuApi == "" {
 		return []string{}, fmt.Errorf("No Jimaku API found in the enviroment variable.")
 	}
+	fmt.Println("\n--> JimakuApiKey found. Querying into the Jimaku api....")
 
 	url_search := fmt.Sprintf("%s/api/entries/search", JimakuBaseUrl)
 
@@ -118,14 +123,17 @@ func GetSubsJimaku(anilistID string, episodeNum int) ([]string, error) {
 
 	query := req.URL.Query()
 	query.Add("anime", "true")
-	query.Add("anilist_id", anilistID)
+
+	if series_data.AnilistID != "" {
+		query.Add("anilist_id", series_data.AnilistID)
+	} else {
+		fmt.Println("--> AnilistID not found. Processing with query method.")
+		query.Add("query", series_data.JapaneseName)
+	}
 
 	req.URL.RawQuery = query.Encode()
 
 	res, err := http.DefaultClient.Do(req)
-
-	fmt.Println("\n--> JimakuApiKey found. Querying into the Jimaku api....")
-
 	if err != nil {
 		return []string{}, fmt.Errorf("Failed to request query: %w", err)
 	}
@@ -142,7 +150,7 @@ func GetSubsJimaku(anilistID string, episodeNum int) ([]string, error) {
 	}
 
 	if data[0].ID < 0 {
-		return []string{}, fmt.Errorf("Couldn't found series id in jimaku. AniId: %s", anilistID)
+		return []string{}, fmt.Errorf("Nothing found.")
 	}
 
 	fmt.Println("--> Jimaku id for series found. Requesting files list...")

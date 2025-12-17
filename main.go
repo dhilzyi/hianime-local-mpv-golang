@@ -363,9 +363,10 @@ series_loop:
 
 					// mpv_commands = append(mpv_commands, "--v")
 
-					jimaku_list, err := jimaku.GetSubsJimaku(series_metadata.AnilistID, selected_ep.Number)
+					jimaku_list, err := jimaku.GetSubsJimaku(series_metadata, selected_ep.Number)
 					if err != nil {
-						fmt.Printf("Failed to get subs from jimaku: %s", err)
+						fmt.Printf("Failed to get subs from jimaku: '%s'\n", err)
+						fmt.Printf("Skipping Jimaku\n")
 					}
 
 					if len(jimaku_list) > 0 {
