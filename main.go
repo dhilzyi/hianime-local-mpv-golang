@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 
 	"hianime-mpv-go/config"
 	"hianime-mpv-go/hianime"
-	"hianime-mpv-go/jimaku"
 	"hianime-mpv-go/player"
 	"hianime-mpv-go/state"
 )
@@ -26,6 +26,7 @@ func main() {
 	if err != nil {
 		fmt.Println("Fail to load config file: " + err.Error())
 	}
+	fmt.Printf("User run in platform: %s\n", runtime.GOOS)
 
 series_loop:
 	for {
@@ -205,69 +206,16 @@ series_loop:
 					continue
 				}
 
-				displayTitle := fmt.Sprintf("%s [Ep. %d] %s (%s)", seriesMetadata.JapaneseName, selectedEpisode.Number, selectedEpisode.JapaneseTitle, selectedServer.Name)
-				headerFields := []string{
-					fmt.Sprintf("Referer: %s", streamData.Referer),
-					fmt.Sprintf("User-Agent: %s", streamData.UserAgent),
-					fmt.Sprintf("Origin: %s", "https://megacloud.blog"),
-				}
-				fullHeaders := strings.Join(headerFields, ",")
+				var success bool
+				var subDelay, lastPos, totalDur float64
+				if runtime.GOOS == "android" {
+					androidCommands := player.BuildAndroidCommands(seriesMetadata, selectedEpisode, selectedServer, streamData)
+					player.PlayAndroidMpv(androidCommands)
 
-				// Main commands
-				mpvCommands := []string{
-					streamData.Url,
-					"--ytdl-format=bestvideo+bestaudio/best",
-					fmt.Sprintf("--http-header-fields=%s", fullHeaders),
-					fmt.Sprintf("--title=%s", displayTitle),
-					"--script-opts=osc-title=${title}",
-				}
-
-				// Load last position if exist
-				lastPosition, exist := historySelect.Episode[selectedEpisode.Number]
-				if exist {
-					mpvCommands = append(mpvCommands, fmt.Sprintf("--start=%f", lastPosition.Position-1))
-				}
-
-				// Chapter command
-				if streamData.Intro.End > 0 && streamData.Outro.Start > 0 {
-					chapter_filename := player.CreateChapters(streamData)
-					if chapter_filename != "" {
-						fmt.Println("--> Adding chapters to mpv.")
-						mpvCommands = append(mpvCommands, fmt.Sprintf("--chapters-file=%s", chapter_filename))
-					}
 				} else {
-					fmt.Println("--> Intro & Outro doesn't found. Skip creating chapters.")
+					desktopCommands := player.BuildDesktopCommands(seriesMetadata, selectedEpisode, selectedServer, streamData, historySelect)
+					success, subDelay, lastPos, totalDur = player.PlayMpv(desktopCommands)
 				}
-
-				// Jimaku subtitle command
-				jimakuList, err := jimaku.GetSubsJimaku(seriesMetadata, selectedEpisode.Number)
-				if err != nil {
-					fmt.Printf("Failed to get subs from jimaku: '%s'\n", err)
-					fmt.Printf("Skipping Jimaku\n")
-				}
-				if len(jimakuList) > 0 {
-					for i := range jimakuList {
-						mpvCommands = append(mpvCommands, fmt.Sprintf("--sub-file=%s", jimakuList[i]))
-					}
-				}
-
-				// Subs from hianime
-				if streamData.Tracks[0].File != "" {
-					for i := range streamData.Tracks {
-						ins := streamData.Tracks[i]
-						if !strings.Contains(ins.File, "thumbnail") {
-							mpvCommands = append(mpvCommands, fmt.Sprintf("--sub-file=%s", ins.File))
-						}
-					}
-				}
-
-				// Sub delay history command
-				if historySelect.SubDelay != 0 {
-					fmt.Println("--> Adding sub-delay from history...")
-					mpvCommands = append(mpvCommands, fmt.Sprintf("--sub-delay=%.1f", historySelect.SubDelay))
-				}
-
-				success, subDelay, lastPos, totalDur := player.PlayMpv(mpvCommands)
 				if success {
 					cleanDelay := math.Round(subDelay*10) / 10
 					historySelect.SubDelay = cleanDelay

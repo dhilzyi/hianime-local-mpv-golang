@@ -10,7 +10,113 @@ import (
 	"time"
 
 	"hianime-mpv-go/hianime"
+	"hianime-mpv-go/jimaku"
+	"hianime-mpv-go/state"
 )
+
+func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episodes, serverData hianime.ServerList, streamingData hianime.StreamData, historyData state.History) []string {
+	displayTitle := fmt.Sprintf("%s [Ep. %d] %s (%s)", metaData.JapaneseName, episodeData.Number, episodeData.JapaneseTitle, serverData.Name)
+
+	// Making headers
+	headerFields := []string{
+		fmt.Sprintf("Referer: %s", streamingData.Referer),
+		fmt.Sprintf("User-Agent: %s", streamingData.UserAgent),
+		fmt.Sprintf("Origin: %s", "https://megacloud.blog"),
+	}
+	fullHeaders := strings.Join(headerFields, ",")
+
+	// Main commands
+	args := []string{
+		streamingData.Url,
+		"--ytdl-format=bestvideo+bestaudio/best",
+		fmt.Sprintf("--http-header-fields=%s", fullHeaders),
+		fmt.Sprintf("--title=%s", displayTitle),
+		"--script-opts=osc-title=${title}",
+	}
+
+	lastPosition, exist := historyData.Episode[episodeData.Number]
+	if exist {
+		args = append(args, fmt.Sprintf("--start=%f", lastPosition.Position-1))
+	}
+
+	// Chapter command
+	if streamingData.Intro.End > 0 && streamingData.Outro.Start > 0 {
+		chapter_filename := CreateChapters(streamingData)
+		if chapter_filename != "" {
+			fmt.Println("--> Adding chapters to mpv.")
+			args = append(args, fmt.Sprintf("--chapters-file=%s", chapter_filename))
+		}
+	} else {
+		fmt.Println("--> Intro & Outro doesn't found. Skip creating chapters.")
+	}
+
+	// Jimaku subtitle command
+	jimakuList, err := jimaku.GetSubsJimaku(metaData, episodeData.Number)
+	if err != nil {
+		fmt.Printf("Failed to get subs from jimaku: '%s'\n", err)
+		fmt.Printf("Skipping Jimaku\n")
+	}
+	if len(jimakuList) > 0 {
+		for i := range jimakuList {
+			args = append(args, fmt.Sprintf("--sub-file=%s", jimakuList[i]))
+		}
+	}
+
+	// Subs from hianime
+	if streamingData.Tracks[0].File != "" {
+		for i := range streamingData.Tracks {
+			ins := streamingData.Tracks[i]
+			if !strings.Contains(ins.File, "thumbnail") {
+				args = append(args, fmt.Sprintf("--sub-file=%s", ins.File))
+			}
+		}
+	}
+
+	// Sub delay history command
+	if historyData.SubDelay != 0 {
+		fmt.Println("--> Adding sub-delay from history...")
+		args = append(args, fmt.Sprintf("--sub-delay=%.1f", historyData.SubDelay))
+	}
+
+	return args
+}
+
+func BuildAndroidCommands(metaData hianime.SeriesData, episodeData hianime.Episodes, serverData hianime.ServerList, streamingData hianime.StreamData) []string {
+
+	headerFields := []string{
+		fmt.Sprintf("Referer: %s", streamingData.Referer),
+		fmt.Sprintf("User-Agent: %s", streamingData.UserAgent),
+		fmt.Sprintf("Origin: %s", "https://megacloud.blog"),
+	}
+
+	fullHeaders := strings.Join(headerFields, ",")
+	mpvCommands := []string{
+		"start",
+		"--user",
+		"0",
+		"-a",
+		"android.intent.action.VIEW",
+		"-d",
+		streamingData.Url,
+		"-n",
+		"is.xyz.mpv/.MPVActivity",
+		"--es",
+		fmt.Sprintf("--http-header-fields=%s", fullHeaders),
+	}
+
+	jimakuList, err := jimaku.GetSubsJimaku(metaData, episodeData.Number)
+	if err != nil {
+		fmt.Printf("Failed to get subs from jimaku: '%s'\n", err)
+		fmt.Printf("Skipping Jimaku\n")
+	}
+	if len(jimakuList) > 0 {
+		for i := range jimakuList {
+			mpvCommands = append(mpvCommands, fmt.Sprintf("--sub-file=%s", jimakuList[i]))
+		}
+	}
+
+	return mpvCommands
+}
 
 // NOTE: For intro and outro in mpv so user can know the timestamps and skip easily.
 func CreateChapters(data hianime.StreamData) string {
@@ -44,6 +150,30 @@ func CreateChapters(data hianime.StreamData) string {
 
 	f.WriteString(contents)
 	return f.Name()
+}
+
+func PlayAndroidMpv(mpvCommands []string) {
+	cmdName := "am"
+
+	cmd := exec.Command(cmdName, mpvCommands...)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Println("Failed to put stdout: " + err.Error())
+	}
+
+	if err := cmd.Start(); err != nil {
+		fmt.Println("Error while running mpv: " + err.Error())
+	}
+
+	if err := cmd.Wait(); err != nil {
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println(line)
+	}
 }
 
 // TODO: Support other platforms.
