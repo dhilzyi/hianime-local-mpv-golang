@@ -7,46 +7,49 @@ import (
 )
 
 var FileName string = "config.json"
+var DebugMode bool
 
 type Settings struct {
-	JimakuEnable     bool   `json:"jimaku_enable"`
-	AutoSelectServer bool   `json:"auto_selectserver"`
-	MpvPath          string `json:"mpv_path"`
+	JimakuEnable     bool   `json:"jimaku_enable"`     // for enabling jimaku
+	AutoSelectServer bool   `json:"auto_selectserver"` // whether user want use auto select server or manual input server
+	MpvPath          string `json:"mpv_path"`          // manually set mpv path command
+	EnglishOnly      bool   `json:"english_only"`      // whether user want importing english subtitle only or not into mpv
 }
 
 func LoadConfig() (Settings, error) {
-	var config_session Settings
+	var configSession Settings
 
 	if _, err := os.Stat(FileName); err == nil {
 		fmt.Println("File config load success.")
 		jsonData, err := os.ReadFile(FileName)
 		if err != nil {
-			return config_session, fmt.Errorf("Failed to open json files: %w", err)
+			return configSession, fmt.Errorf("Failed to open json files: %w", err)
 		}
 
-		if err = json.Unmarshal(jsonData, &config_session); err != nil {
-			return config_session, fmt.Errorf("Failed to convert to struct: %w", err)
+		if err = json.Unmarshal(jsonData, &configSession); err != nil {
+			return configSession, fmt.Errorf("Failed to convert to struct: %w", err)
 		}
 
 	} else if os.IsNotExist(err) {
 		_, err := os.Create(FileName)
 
-		config_session = Settings{
+		configSession = Settings{
 			JimakuEnable:     true,
 			AutoSelectServer: true,
 			MpvPath:          "",
+			EnglishOnly:      true,
 		}
 
-		SaveConfig(config_session)
+		SaveConfig(configSession)
 
 		if err != nil {
-			return config_session, fmt.Errorf("Failed to create history json file: %w", err)
+			return configSession, fmt.Errorf("Failed to create history json file: %w", err)
 		}
 	} else {
-		return config_session, fmt.Errorf("Error accessing path %s: %w\n", FileName, err)
+		return configSession, fmt.Errorf("Error accessing path %s: %w\n", FileName, err)
 	}
 
-	return config_session, nil
+	return configSession, nil
 }
 
 func SaveConfig(rawData Settings) error {

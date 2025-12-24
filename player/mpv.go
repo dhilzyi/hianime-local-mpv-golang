@@ -10,12 +10,15 @@ import (
 	"strings"
 	"time"
 
+	"hianime-mpv-go/config"
 	"hianime-mpv-go/hianime"
 	"hianime-mpv-go/jimaku"
 	"hianime-mpv-go/state"
+	"hianime-mpv-go/ui"
 )
 
-func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episodes, serverData hianime.ServerList, streamingData hianime.StreamData, historyData state.History) []string {
+func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episodes, serverData hianime.ServerList, streamingData hianime.StreamData, historyData state.History, configData config.Settings) []string {
+	// Building title display for mpv
 	displayTitle := fmt.Sprintf("%s [Ep. %d] %s (%s)", metaData.JapaneseName, episodeData.Number, episodeData.JapaneseTitle, serverData.Name)
 
 	// Making headers
@@ -35,14 +38,15 @@ func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episo
 		"--script-opts=osc-title=${title}",
 	}
 
-	lastPosition, exist := historyData.Episode[episodeData.Number]
+	// last position if exist in history
+	episodeProgress, exist := historyData.Episode[episodeData.Number]
 	if exist {
-		args = append(args, fmt.Sprintf("--start=%f", lastPosition.Position-1))
+		args = append(args, fmt.Sprintf("--start=%f", episodeProgress.Position-1))
 	}
 
 	// Chapter command
 	if streamingData.Intro.End > 0 && streamingData.Outro.Start > 0 {
-		chapter_filename := CreateChapters(streamingData)
+		chapter_filename := CreateChapters(streamingData, historyData, episodeData)
 		if chapter_filename != "" {
 			fmt.Println("--> Adding chapters to mpv.")
 			args = append(args, fmt.Sprintf("--chapters-file=%s", chapter_filename))
@@ -64,13 +68,15 @@ func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episo
 	}
 
 	// Subs from hianime
-	if streamingData.Tracks[0].File != "" {
-		for i := range streamingData.Tracks {
-			ins := streamingData.Tracks[i]
-			if !strings.Contains(ins.File, "thumbnail") {
-				args = append(args, fmt.Sprintf("--sub-file=%s", ins.File))
-			}
+	for _, track := range streamingData.Tracks {
+		if track.Kind == "thumbnails" {
+			continue
 		}
+		if configData.EnglishOnly && track.Label != "English" {
+			continue
+		}
+
+		args = append(args, fmt.Sprintf("--sub-file=%s", track.File))
 	}
 
 	// Sub delay history command
@@ -79,11 +85,18 @@ func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episo
 		args = append(args, fmt.Sprintf("--sub-delay=%.1f", historyData.SubDelay))
 	}
 
+	// track script & debug command
+	trackScript := "player/track.lua"
+	args = append(args, "--script="+trackScript)
+	if config.DebugMode {
+		args = append(args, "--v")
+	}
+
 	return args
 }
 
 // NOTE: For intro and outro in mpv so user can know the timestamps and skip easily.
-func CreateChapters(data hianime.StreamData) string {
+func CreateChapters(data hianime.StreamData, historyData state.History, episodeData hianime.Episodes) string {
 
 	f, err := os.CreateTemp("", "hianime_chapters_*.txt")
 	if err != nil {
@@ -110,26 +123,31 @@ func CreateChapters(data hianime.StreamData) string {
 
 	writePart(data.Intro.End, data.Outro.Start, "Part B")
 	writePart(data.Outro.Start, data.Outro.End, "Outro")
-	writePart(data.Outro.End, 9999999, "Part C")
+
+	// Using exact duration from history if exist
+	episodeProgress, exist := historyData.Episode[episodeData.Number]
+	if exist {
+		ui.DebugPrint("[CHAPTER]", "History duration exist")
+		writePart(data.Outro.End, int(episodeProgress.Duration), "Part C")
+	} else {
+		ui.DebugPrint("[CHAPTER]", "History duration not exist")
+		writePart(data.Outro.End, 9999999, "Part C")
+	}
 
 	f.WriteString(contents)
 	return f.Name()
 }
 
-// TODO: Support other platforms.
 // Now it supports windows and linux automatically, without hardcoding the mpv path. I hope
-func PlayMpv(cmdMain string, mpv_commands []string) (bool, float64, float64, float64) {
+func PlayMpv(cmdMain string, args []string) (bool, float64, float64, float64) {
 	cmdName := cmdMain
-
-	track_script := "player/track.lua"
-	mpv_commands = append(mpv_commands, "--script="+track_script)
 
 	var stream_started bool
 	var subDelay float64
 	var lastPos float64
 	var totalDuration float64
 
-	cmd := exec.Command(cmdName, mpv_commands...)
+	cmd := exec.Command(cmdName, args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -153,7 +171,7 @@ func PlayMpv(cmdMain string, mpv_commands []string) (bool, float64, float64, flo
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// fmt.Println(line)
+		ui.DebugPrint("[MPV]", line)
 
 		if strings.Contains(line, "(+) Video --vid= ") || strings.Contains(line, "h264") {
 			timer.Stop()
@@ -193,6 +211,7 @@ func PlayMpv(cmdMain string, mpv_commands []string) (bool, float64, float64, flo
 			}
 
 			continue
+
 		} else if strings.Contains(line, "::SUB_DELAY::") {
 			parts := strings.Split(line, "::SUB_DELAY::")
 

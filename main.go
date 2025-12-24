@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -29,6 +30,8 @@ func main() {
 		fmt.Println("Fail to load config file: " + err.Error())
 	}
 
+	flag.BoolVar(&config.DebugMode, "debug", false, "Enable verbose debug logging")
+	flag.Parse()
 series_loop:
 	for {
 		if len(history) > 0 {
@@ -56,8 +59,8 @@ series_loop:
 			seriesMetadata = hianime.GetSeriesData(url)
 			new_history := state.History{
 				Url:          seriesMetadata.SeriesUrl,
-				JapaneseName: seriesMetadata.JapaneseName,
-				EnglishName:  seriesMetadata.EnglishName,
+				JapaneseName: strings.TrimSpace(seriesMetadata.JapaneseName),
+				EnglishName:  strings.TrimSpace(seriesMetadata.EnglishName),
 				AnilistID:    seriesMetadata.AnilistID,
 				LastEpisode:  1,
 				Episode:      make(map[int]state.EpisodeProgress),
@@ -124,6 +127,8 @@ series_loop:
 				fmt.Println("Number is invalid.")
 				continue
 			}
+
+			var testedServer int
 		server_loop:
 			for {
 				if len(servers) == 0 {
@@ -136,13 +141,19 @@ series_loop:
 
 				if configSession.AutoSelectServer {
 					fmt.Println("\n--> Auto-select server enabled.")
-					for i := range servers {
+					for i := testedServer; i < len(servers); i++ {
 						selectedServer = servers[i]
+						if strings.Contains("HD-3", selectedServer.Name) {
+							fmt.Printf("-> Skipping 'HD-3' server")
+							continue
+						}
+
 						fmt.Printf("--> Selecting '%s'....\n", selectedServer.Name)
 
 						attempt, err := hianime.GetStreamData(selectedServer.DataId)
 						if err == nil {
 							streamData = attempt
+							testedServer = i + 1
 							break
 						}
 					}
@@ -180,7 +191,7 @@ series_loop:
 						attempt, err := hianime.GetStreamData(selectedServer.DataId)
 						if err == nil {
 							streamData = attempt
-							break
+							fmt.Println(streamData)
 						}
 					} else {
 						fmt.Println("Number is invalid.")
@@ -189,12 +200,13 @@ series_loop:
 				}
 
 				if streamData.Url == "" {
+					fmt.Println("Couldn't find streamdata url!")
 					continue
 				}
 
 				// get mpv path automatically according user platforms.
 				binName := player.GetMpvBinary(configSession.MpvPath)
-				desktopCommands := player.BuildDesktopCommands(seriesMetadata, selectedEpisode, selectedServer, streamData, historySelect)
+				desktopCommands := player.BuildDesktopCommands(seriesMetadata, selectedEpisode, selectedServer, streamData, historySelect, configSession)
 
 				success, subDelay, lastPos, totalDur := player.PlayMpv(binName, desktopCommands)
 
@@ -216,7 +228,7 @@ series_loop:
 
 					break server_loop
 				} else {
-					break
+					continue
 				}
 			}
 		}

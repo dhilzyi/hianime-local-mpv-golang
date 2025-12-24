@@ -1,4 +1,6 @@
 {
- "jimaku_enable": true, 
- "auto_selectserver": true
+ "jimaku_enable": true,
+ "auto_selectserver": true,
+ "mpv_path": "",
+ "english_only": true
 }

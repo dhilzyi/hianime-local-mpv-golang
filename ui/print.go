@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 
+	"hianime-mpv-go/config"
 	"hianime-mpv-go/hianime"
 	"hianime-mpv-go/state"
 )
@@ -36,4 +37,11 @@ func PrintEpisodes(episodes []hianime.Episodes, history state.History) {
 		fmt.Printf(" %s [%d] %s		%s\n", prefix, eps.Number, title, timeInfo)
 	}
 
+}
+
+func DebugPrint(format string, contents ...any) {
+	if config.DebugMode {
+		prefix := "[ DEBUG ] "
+		fmt.Println(prefix, contents)
+	}
 }
