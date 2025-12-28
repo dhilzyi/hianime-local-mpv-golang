@@ -50,7 +50,7 @@ func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episo
 	}
 
 	// Chapter command
-	if streamingData.Intro.End > 0 && streamingData.Outro.Start > 0 {
+	if streamingData.Intro.End > 0 || streamingData.Outro.Start > 0 {
 		chapter_pathfile := CreateChapters(streamingData, historyData, episodeData)
 		if chapter_pathfile != "" {
 			fmt.Println("--> Adding chapters to mpv.")
@@ -61,15 +61,20 @@ func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episo
 	}
 
 	// Jimaku subtitle command
-	jimakuList, err := jimaku.GetSubsJimaku(metaData, episodeData.Number)
-	if err != nil {
-		fmt.Printf("Failed to get subs from jimaku: '%s'\n", err)
-		fmt.Printf("Skipping Jimaku\n")
-	}
-	if len(jimakuList) > 0 {
-		for i := range jimakuList {
-			args = append(args, fmt.Sprintf("--sub-file=%s", jimakuList[i]))
+	if configData.JimakuEnable {
+		jimakuList, err := jimaku.GetSubsJimaku(metaData, episodeData.Number)
+		if err != nil {
+			fmt.Printf("Failed to get subs from jimaku: '%s'\n", err)
+			fmt.Printf("Skipping Jimaku\n")
+		} else {
+			if len(jimakuList) > 0 {
+				for i := range jimakuList {
+					args = append(args, fmt.Sprintf("--sub-file=%s", jimakuList[i]))
+				}
+			}
 		}
+	} else {
+		fmt.Printf("--> Skipping Jimaku\n")
 	}
 
 	// Subs from hianime
@@ -122,15 +127,19 @@ func CreateChapters(data hianime.StreamData, historyData state.History, episodeD
 		contents += fmt.Sprintf("title=%s\n\n", title)
 	}
 
-	if data.Intro.Start == 0 {
-		writePart(data.Intro.Start, data.Intro.End, "Intro")
-	} else {
-		writePart(0, data.Intro.Start, "Part A")
-		writePart(data.Intro.Start, data.Intro.End, "Intro")
+	if data.Intro.Start > 0 || data.Intro.End > 0 {
+		if data.Intro.Start == 0 {
+			writePart(data.Intro.Start, data.Intro.End, "Intro")
+		} else {
+			writePart(0, data.Intro.Start, "Part A")
+			writePart(data.Intro.Start, data.Intro.End, "Intro")
+		}
 	}
 
-	writePart(data.Intro.End, data.Outro.Start, "Part B")
-	writePart(data.Outro.Start, data.Outro.End, "Outro")
+	if data.Outro.Start > 0 && data.Outro.End > 0 {
+		writePart(data.Intro.End, data.Outro.Start, "Part B")
+		writePart(data.Outro.Start, data.Outro.End, "Outro")
+	}
 
 	// Using exact duration from history if exist
 	episodeProgress, exist := historyData.Episode[episodeData.Number]

@@ -149,8 +149,12 @@ func GetSubsJimaku(series_data hianime.SeriesData, episodeNum int) ([]string, er
 		return []string{}, fmt.Errorf("Failed to decode to JSON: %w", err)
 	}
 
-	if data[0].ID < 0 {
-		return []string{}, fmt.Errorf("Nothing found.")
+	if len(data) == 0 {
+		return []string{}, fmt.Errorf("--! Nothing found in Jimaku.")
+	}
+
+	if data[0].ID <= 0 {
+		return []string{}, fmt.Errorf("Invalid ID found.")
 	}
 
 	files_list, err := getFiles(int(data[0].ID), episodeNum)

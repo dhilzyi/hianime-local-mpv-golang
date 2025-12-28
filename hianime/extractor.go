@@ -141,17 +141,26 @@ func GetEpisodeServerId(episode_id int) []ServerList {
 		data_type, exists := s.Attr("data-type")
 		if !exists {
 			fmt.Println("Couldn't found 'data-type': " + err.Error())
+			return
 		}
 		data_id, exists := s.Attr("data-id")
 		if !exists {
 			fmt.Println("Couldn't found data-id: " + err.Error())
+			return
 		}
 		int_data_id, err := strconv.Atoi(data_id)
 		if err != nil {
 			fmt.Println("Failed to convert 'data_id' to int: " + err.Error())
+			return
 		}
 
 		name := s.Find("a").Text()
+
+		// NOTE: Excluding the HD-3 servers for now
+		if strings.Contains("HD-3", name) {
+			return
+		}
+
 		instance := ServerList{
 			Type:   data_type,
 			Name:   name,

@@ -19,8 +19,9 @@ import (
 var cacheEpisodes = make(map[string][]hianime.Episodes) // "AnimeID" : {{Eps: 1, ...}, ...}
 
 func main() {
-	var url string
 	scanner := bufio.NewScanner(os.Stdin)
+
+	var url string
 	history, err := state.LoadHistory()
 	if err != nil {
 		fmt.Println(err)
@@ -140,13 +141,15 @@ series_loop:
 				var streamData hianime.StreamData
 
 				if configSession.AutoSelectServer {
+					if testedServer >= len(servers) {
+						fmt.Println("\nNo available servers found for following episode.")
+						break
+					}
+
 					fmt.Println("\n--> Auto-select server enabled.")
+
 					for i := testedServer; i < len(servers); i++ {
 						selectedServer = servers[i]
-						if strings.Contains("HD-3", selectedServer.Name) {
-							fmt.Printf("-> Skipping 'HD-3' server")
-							continue
-						}
 
 						fmt.Printf("--> Selecting '%s'....\n", selectedServer.Name)
 
