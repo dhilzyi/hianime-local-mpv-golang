@@ -40,7 +40,7 @@ func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episo
 		"--ytdl-format=bestvideo+bestaudio/best",
 		fmt.Sprintf("--http-header-fields=%s", fullHeaders),
 		fmt.Sprintf("--title=%s", displayTitle),
-		"--script-opts=osc-title=${title}",
+		"--script-opts-append=osc-title=${title}",
 	}
 
 	// last position if exist in history
@@ -98,7 +98,7 @@ func BuildDesktopCommands(metaData hianime.SeriesData, episodeData hianime.Episo
 	// track script & debug command
 	scriptLua, err := EnsureTrackScript("track.lua")
 	if err == nil {
-		args = append(args, "--script="+scriptLua)
+		args = append(args, "--scripts-append="+scriptLua)
 	}
 
 	if config.DebugMode {
