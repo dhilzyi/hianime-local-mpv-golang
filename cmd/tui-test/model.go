@@ -6,6 +6,7 @@ import (
 
 	"github.com/dhilzyi/hianime-cli/internal/app"
 	"github.com/dhilzyi/hianime-cli/internal/config"
+	"github.com/dhilzyi/hianime-cli/internal/player"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -17,10 +18,13 @@ const (
 	StateHistory screenState = iota
 	StateEpisodes
 	StateServer
+
+	StateProcessStream
 	StatePlaying
 
 	// Message state
 	StateError
+	StateLog
 
 	// Miscellaneous
 	StateConfigSettings
@@ -36,6 +40,7 @@ type model struct {
 	session  *session
 	cfg      *config.Config
 	appCache *app.Cache
+	appPath  config.AppPaths
 }
 
 func (m model) Init() tea.Cmd {
@@ -70,6 +75,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.subs = !m.subs
 			case "c":
 				m.state = StateConfigSettings
+			case "d":
+				msgCh := make(chan string)
 			case "enter":
 				m.session.selected.history = m.session.historyList[m.cursor]
 				m.session.urlSeries = m.session.selected.history.Metadata.SeriesUrl
@@ -127,6 +134,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor >= len(m.session.serverList) {
 					m.cursor = 0
 				}
+			case "enter", "space":
+				m.session.selected.server = m.session.serverList[m.cursor]
+				stream, err := m.session.provider.GetStreamData(m.session.selected.server.Key)
+				if err != nil {
+					sendErr(&m, err)
+					return m, nil
+				}
+				m.session.selected.stream = stream
+
+				m.cursor = 0
+				m.state = StatePlaying
+			}
+		case StatePlaying:
+			switch msg.String() {
+			case "q", "esc":
+				m.cursor = 0
+				m.state = StateServer
 			}
 		case StateError:
 			switch msg.String() {
@@ -166,7 +190,7 @@ func (m model) View() tea.View {
 			} else {
 				buf.WriteString("   ")
 			}
-			fmt.Fprintf(&buf, fmt.Sprintf("[%d] %s\n", ep.Number, ep.Titles.GetPreferredTitle()))
+			fmt.Fprintf(&buf, "[%d] %s\n", ep.Number, ep.Titles.GetPreferredTitle())
 		}
 		fmt.Fprintf(&buf, "\nSelected: %s", m.session.episodeList[m.cursor].Titles.GetPreferredTitle())
 	case StateServer:
@@ -177,8 +201,27 @@ func (m model) View() tea.View {
 			} else {
 				buf.WriteString("   ")
 			}
-			fmt.Fprintf(&buf, fmt.Sprintf("[%d] %s\n", i+1, srv.Name))
+			fmt.Fprintf(&buf, "[%d] %s\n", i+1, srv.Name)
 		}
+	case StateProcessStream:
+		msgChan := make(chan string)
+		cmds := player.BuildMpvCommands(
+			*m.cfg,
+			m.session.selected.series,
+			m.session.selected.episode,
+			m.session.selected.server,
+			m.session.selected.stream,
+			m.session.selected.history,
+			m.appPath.DataDir,
+			false,
+			msgChan,
+		)
+	case StatePlaying:
+		buf.WriteString("--- PLAYING ---\n\n")
+		buf.WriteString("Info:\n")
+		fmt.Fprintf(&buf, "	No.Episode: %d\n", m.session.selected.episode.Number)
+		fmt.Fprintf(&buf, "	Episode Title: %s\n", m.session.selected.episode.Titles.GetPreferredTitle())
+		buf.WriteString("\nPress 'q' to end session...")
 	case StateError:
 		buf.WriteString("--- ERROR ---\n\n")
 		buf.WriteString("Something unexpected just occured\n")

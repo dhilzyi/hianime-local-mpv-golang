@@ -32,6 +32,7 @@ func BuildMpvCommands(
 	historyData state.History,
 	datadir string,
 	verbose bool,
+	msgCh chan string,
 ) []string {
 	// Building title display for mpv
 	displayTitle := fmt.Sprintf("[Ep. %d] %s (%s)", episodeData.Number, episodeData.Titles.GetPreferredTitle(), serverData.Name)

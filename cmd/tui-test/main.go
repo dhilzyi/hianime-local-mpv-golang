@@ -15,6 +15,7 @@ func main() {
 	appDir, err := config.InitPath()
 	if err != nil {
 		fmt.Println("Fail to initialize path: " + err.Error())
+		os.Exit(1)
 	}
 
 	cfg, err := config.LoadConfig(appDir.ConfigDir, "v1.9.0")
@@ -36,6 +37,7 @@ func main() {
 			historyList: history,
 		},
 		appCache: cache,
+		appPath:  appDir,
 	}
 
 	p := tea.NewProgram(initialModel)

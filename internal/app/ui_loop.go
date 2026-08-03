@@ -225,6 +225,7 @@ func (a *App) handleServerView(
 			*selectedHistory,
 			a.AppDir.DataDir,
 			a.Flags.MpvVerbose,
+			nil,
 		)
 
 		success, subDelay, lastPos, totalDur := player.PlayMpv(binName, desktopCommands, a.Flags.MpvVerbose)

@@ -25,6 +25,8 @@ type errData struct {
 
 type selected struct {
 	history state.History
+	series  core.SeriesData
 	episode core.Episode
 	server  core.Server
+	stream  core.StreamData
 }
