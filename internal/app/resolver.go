@@ -20,7 +20,7 @@ type FetchResult struct {
 	Episodes   []core.Episode
 }
 
-type resolveParams struct {
+type ResolveParams struct {
 	URL       string
 	AnilistID int
 }
@@ -44,7 +44,7 @@ const (
 	InputAnilistID
 )
 
-func getProvider(p resolveParams) (core.Provider, ProviderType) {
+func getProvider(p ResolveParams) (core.Provider, ProviderType) {
 	if strings.Contains(p.URL, "animenosub") {
 		return animenosub.New(p.URL), AnimeNoSub
 	} else if strings.Contains(p.URL, "reanime") {
@@ -79,7 +79,7 @@ func classifyInput(input string) (InputType, int) {
 	return InputURL, 0
 }
 
-func handleURLInput(p resolveParams, provider core.Provider) ([]core.Episode, core.SeriesData, error) {
+func handleURLInput(p ResolveParams, provider core.Provider) ([]core.Episode, core.SeriesData, error) {
 	episodes, series, err := provider.GetEpisodes()
 	if err != nil {
 		return nil, core.SeriesData{}, err
@@ -88,7 +88,7 @@ func handleURLInput(p resolveParams, provider core.Provider) ([]core.Episode, co
 	return episodes, *series, nil
 }
 
-func fromCache(entry *CacheEntry, p resolveParams) *FetchResult {
+func fromCache(entry *CacheEntry, p ResolveParams) *FetchResult {
 	provider, _ := getProvider(p)
 	return &FetchResult{
 		Provider:   provider,
@@ -97,7 +97,7 @@ func fromCache(entry *CacheEntry, p resolveParams) *FetchResult {
 	}
 }
 
-func ResolveInput(p resolveParams, cache *Cache) (*FetchResult, error) {
+func ResolveInput(p ResolveParams, cache *Cache) (*FetchResult, error) {
 	if p.AnilistID != 0 {
 		if entry, ok := cache.byAnilistID[p.AnilistID]; ok {
 			fmt.Println("Info: cache hit by anilistId")

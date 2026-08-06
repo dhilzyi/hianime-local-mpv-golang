@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// Eliminating whitspace then replacing it with '+' symbol
+// Example:
+// Seishun no -> Seishun+no,
+// made in abyss -> made+in+abyss
 func StringToQueryFormat(rawInput string) string {
 	rawSplitted := strings.Split(rawInput, " ")
 	if len(rawSplitted) == 0 {
@@ -15,7 +19,9 @@ func StringToQueryFormat(rawInput string) string {
 	return strings.Join(rawSplitted, "+")
 }
 
-// example: https://example.com
+// Getting base url from any url
+// Example:
+// https://youtube.com, https://yandex.ru
 func GetBaseURL(rawUrl string) (string, error) {
 	parsedURL, err := url.Parse(rawUrl)
 	if err != nil {

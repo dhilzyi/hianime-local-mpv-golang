@@ -13,6 +13,7 @@ type defaultHeadersTransport struct {
 }
 
 // RoundTrip intercepts the request before it is sent
+// It will only use default headers if the headers is not specifically being set
 func (t *defaultHeadersTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	reqClone := req.Clone(req.Context())
 
@@ -25,6 +26,8 @@ func (t *defaultHeadersTransport) RoundTrip(req *http.Request) (*http.Response, 
 	return t.baseTransport.RoundTrip(reqClone)
 }
 
+// Retrieve cookiejar and will use it as long the client is remain same
+// Use this client when fetching as one session
 func NewSession() (*http.Client, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {

@@ -59,7 +59,7 @@ func (a *App) handleMenu() {
 			continue
 		}
 
-		fetchResult, err = ResolveInput(resolveParams{URL: url, AnilistID: anilistID}, a.Cache)
+		fetchResult, err = ResolveInput(ResolveParams{URL: url, AnilistID: anilistID}, a.Cache)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -225,6 +225,7 @@ func (a *App) handleServerView(
 			*selectedHistory,
 			a.AppDir.DataDir,
 			a.Flags.MpvVerbose,
+			nil,
 		)
 
 		success, subDelay, lastPos, totalDur := player.PlayMpv(binName, desktopCommands, a.Flags.MpvVerbose)
@@ -274,7 +275,7 @@ func (a *App) handleSearchView() string {
 			continue
 		}
 
-		provider, _ := getProvider(resolveParams{URL: strings.ToLower(providers[provInputInt-1])})
+		provider, _ := getProvider(ResolveParams{URL: strings.ToLower(providers[provInputInt-1])})
 		fmt.Printf("Info: '%s' is selected\n", provider.Name())
 
 		searchState, err := NewSearchState(provider)

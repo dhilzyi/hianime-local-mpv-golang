@@ -133,7 +133,35 @@ func PrintServers(servers []core.Server) {
 
 func PrintRecentHistory(history []state.History) {
 	fmt.Printf("\n--- Recent History ---\n\n")
-	table := tablewriter.NewWriter(os.Stdout)
+	symbols := tw.NewSymbolCustom("MyGrid").
+		WithRow("─").
+		WithColumn("│").
+		WithCenter("┼")
+
+	table := tablewriter.NewTable(os.Stdout,
+
+		tablewriter.WithRenderer(renderer.NewBlueprint(tw.Rendition{
+			Borders: tw.BorderNone,
+			Symbols: symbols,
+			Settings: tw.Settings{
+				Separators: tw.Separators{
+					BetweenColumns: tw.On,
+				},
+				Lines: tw.Lines{
+					ShowTop: tw.On,
+				},
+			},
+		})),
+
+		tablewriter.WithConfig(tablewriter.Config{
+			Header: tw.CellConfig{
+				Alignment: tw.CellAlignment{Global: tw.AlignLeft},
+			},
+			Row: tw.CellConfig{
+				Alignment: tw.CellAlignment{Global: tw.AlignLeft},
+			},
+		}),
+	)
 	table.Header([]string{"NO", "NAME", "TYPE", "PROVIDER"})
 
 	var provider string
